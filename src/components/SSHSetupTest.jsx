@@ -6,7 +6,7 @@ export function SSHSetupTest() {
   const [status, setStatus] = useState('idle');
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const { generateKeys, updateCloudwaysKey } = useSSHSetup();
+  const { setupSSH } = useSSHSetup();
 
   const handleTest = async () => {
     setStatus('running');
@@ -14,16 +14,9 @@ export function SSHSetupTest() {
     setResult(null);
 
     try {
-      // Step 1: Generate SSH key pair
-      setStatus('generating-keys');
-      const keyPair = await generateKeys();
-      setResult(prev => ({ ...prev, keyPair }));
-
-      // Step 2: Update Cloudways with public key
-      setStatus('updating-cloudways');
-      const sshAccess = await updateCloudwaysKey();
-      setResult(prev => ({ ...prev, sshAccess }));
-
+      setStatus('setting-up-ssh');
+      const setupResult = await setupSSH();
+      setResult(setupResult);
       setStatus('complete');
     } catch (err) {
       console.error('SSH setup failed:', err);
@@ -41,17 +34,16 @@ export function SSHSetupTest() {
         disabled={status === 'running'}
         className="mb-4"
       >
-        {status === 'running' ? 'Testing...' : 'Run SSH Setup Test'}
+        {status === 'running' ? 'Setting up SSH...' : 'Run SSH Setup'}
       </Button>
 
       {/* Status Display */}
       {status !== 'idle' && status !== 'error' && (
         <div className="mb-4">
           <p className="text-blue-400">
-            Status: {status === 'running' ? 'Running test...' :
-                    status === 'generating-keys' ? 'Generating SSH keys...' :
-                    status === 'updating-cloudways' ? 'Updating Cloudways...' :
-                    status === 'complete' ? 'Test complete!' : status}
+            Status: {status === 'running' ? 'Initializing...' :
+                    status === 'setting-up-ssh' ? 'Setting up SSH access...' :
+                    status === 'complete' ? 'Setup complete!' : status}
           </p>
         </div>
       )}
@@ -67,7 +59,7 @@ export function SSHSetupTest() {
       {/* Results Display */}
       {result && (
         <div className="mt-4">
-          <h3 className="font-bold mb-2">Test Results:</h3>
+          <h3 className="font-bold mb-2">Setup Results:</h3>
           
           {result.keyPair && (
             <div className="mb-4">

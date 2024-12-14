@@ -8,6 +8,7 @@ export function useSSHSetup() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState(null);
   const [keyPair, setKeyPair] = useState(null);
+  const [sshAccess, setSSHAccess] = useState(null);
 
   const cloudways = new CloudwaysService(
     CLOUDWAYS_CONFIG.API_KEY,
@@ -31,8 +32,9 @@ export function useSSHSetup() {
     }
   }, []);
 
-  const updateCloudwaysKey = useCallback(async () => {
-    if (!keyPair) {
+  const updateCloudwaysKey = useCallback(async (generatedKeyPair = null) => {
+    const currentKeyPair = generatedKeyPair || keyPair;
+    if (!currentKeyPair) {
       throw new Error('No SSH key pair available');
     }
 
@@ -44,16 +46,17 @@ export function useSSHSetup() {
       
       await cloudways.updateSSHKey(
         CLOUDWAYS_CONFIG.SOURCE_SERVER_ID,
-        keyPair.publicKey
+        currentKeyPair.publicKey
       );
 
       // Get updated SSH access details
-      const sshAccess = await cloudways.getSSHAccess(
+      const access = await cloudways.getSSHAccess(
         CLOUDWAYS_CONFIG.SOURCE_SERVER_ID,
         CLOUDWAYS_CONFIG.SOURCE_APP_ID
       );
 
-      return sshAccess;
+      setSSHAccess(access);
+      return access;
     } catch (err) {
       setError(err.message);
       throw err;
@@ -62,12 +65,32 @@ export function useSSHSetup() {
     }
   }, [keyPair]);
 
+  const setupSSH = useCallback(async () => {
+    try {
+      // Step 1: Generate keys
+      const newKeyPair = await generateKeys();
+      
+      // Step 2: Update Cloudways with the new key
+      const access = await updateCloudwaysKey(newKeyPair);
+      
+      return {
+        keyPair: newKeyPair,
+        sshAccess: access
+      };
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, [generateKeys, updateCloudwaysKey]);
+
   return {
     isGenerating,
     isUpdating,
     error,
     keyPair,
+    sshAccess,
     generateKeys,
-    updateCloudwaysKey
+    updateCloudwaysKey,
+    setupSSH
   };
 }
