@@ -9,7 +9,7 @@ export class SSHConnection {
     this.connected = false;
     this.retryAttempts = 3;
     this.retryDelay = 2000;
-    this.connectionTimeout = 60000; // Increased to 60 seconds
+    this.connectionTimeout = 120000; // Increased to 120 seconds
   }
 
   validate() {
@@ -39,8 +39,9 @@ export class SSHConnection {
       password: this.password,
       readyTimeout: this.connectionTimeout,
       keepaliveInterval: 10000,
-      keepaliveCountMax: 3,
-      tryKeyboard: true, // Support keyboard-interactive auth
+      keepaliveCountMax: 10, // Increased keepalive count
+      tryKeyboard: true,
+      debug: true, // Enable debug logging
       algorithms: {
         kex: [
           'ecdh-sha2-nistp256',

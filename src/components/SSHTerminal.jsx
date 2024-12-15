@@ -1,43 +1,39 @@
 import React, { useState, useCallback } from 'react';
-import { useSSH } from '../hooks/useSSH';
 import { Button } from './Button';
+import { useWebSSH } from '../hooks/useWebSSH';
 
 export function SSHTerminal() {
-  const {
+  const { 
     isConnected,
     isProcessing,
     error,
+    output,
     connect,
     disconnect,
     executeCommand
-  } = useSSH();
+  } = useWebSSH();
 
   const [credentials, setCredentials] = useState({
     host: '',
     username: '',
     password: ''
   });
-  const [output, setOutput] = useState('');
 
   const handleConnect = useCallback(async () => {
     try {
       await connect(credentials);
-      setOutput('Connected successfully! Try running a test command.');
     } catch (err) {
-      setOutput('');
-      console.error('Connection error:', err);
+      console.error('SSH setup error:', err);
     }
   }, [connect, credentials]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();
-    setOutput('Disconnected.');
   }, [disconnect]);
 
-  const handleCommand = useCallback(async () => {
+  const handleTestCommand = useCallback(async () => {
     try {
-      const result = await executeCommand('whoami && pwd');
-      setOutput(result.output);
+      await executeCommand('whoami && pwd');
     } catch (err) {
       console.error('Command error:', err);
     }
@@ -71,7 +67,7 @@ export function SSHTerminal() {
             value={credentials.username}
             onChange={(e) => setCredentials(prev => ({
               ...prev,
-              username: e.target.value.trim()
+              username: e.target.value
             }))}
             placeholder="Enter username"
             className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 
@@ -110,40 +106,38 @@ export function SSHTerminal() {
             <Button onClick={handleDisconnect} variant="secondary">
               Disconnect
             </Button>
-            <Button onClick={handleCommand} disabled={isProcessing}>
-              Test Command
+            <Button onClick={handleTestCommand} disabled={isProcessing}>
+              {isProcessing ? 'Running...' : 'Test Command'}
             </Button>
           </>
         )}
       </div>
 
-      <div className="space-y-4">
-        {/* Connection Status */}
-        <div className="flex items-center space-x-2">
-          <div className={`w-3 h-3 rounded-full ${
-            isConnected ? 'bg-green-500' : 'bg-red-500'
-          }`} />
-          <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="p-4 bg-red-900/50 text-red-200 rounded">
-            <p className="font-semibold">Error:</p>
-            <p>{error}</p>
-          </div>
-        )}
-
-        {/* Output Display */}
-        {output && (
-          <div className="p-4 bg-gray-900 rounded">
-            <p className="font-semibold mb-2">Output:</p>
-            <pre className="whitespace-pre-wrap font-mono text-sm">
-              {output}
-            </pre>
-          </div>
-        )}
+      {/* Connection Status */}
+      <div className="flex items-center space-x-2 mb-4">
+        <div className={`w-3 h-3 rounded-full ${
+          isConnected ? 'bg-green-500' : 'bg-red-500'
+        }`} />
+        <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
       </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-900/50 text-red-200 rounded">
+          <p className="font-semibold">Error:</p>
+          <p>{error}</p>
+        </div>
+      )}
+
+      {/* Output Display */}
+      {output && (
+        <div className="p-4 bg-gray-900 rounded">
+          <p className="font-semibold mb-2">Output:</p>
+          <pre className="whitespace-pre-wrap font-mono text-sm">
+            {output}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

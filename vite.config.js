@@ -8,16 +8,11 @@ export default defineConfig({
     proxy: {
       '/ssh-proxy': {
         target: 'ws://localhost:3001',
-        ws: true
+        ws: true,
+        secure: false,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ssh-proxy/, '')
       }
     }
-  },
-  build: {
-    rollupOptions: {
-      external: ['fs/promises']
-    }
-  },
-  optimizeDeps: {
-    exclude: ['fs/promises']
   }
 });

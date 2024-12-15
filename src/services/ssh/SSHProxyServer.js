@@ -7,7 +7,8 @@ export class SSHProxyServer {
     this.wss = new WebSocketServer({ 
       server,
       path: '/ssh-proxy',
-      perMessageDeflate: false
+      perMessageDeflate: false,
+      clientTracking: true
     });
     this.clients = new Map();
     this.setupWebSocketServer();
@@ -41,13 +42,13 @@ export class SSHProxyServer {
         this.cleanup(clientId);
       });
 
-      // Setup ping/pong
+      // Setup ping/pong with more frequent checks
       ws.isAlive = true;
       ws.on('pong', () => { ws.isAlive = true; });
     });
 
-    // Heartbeat check
-    setInterval(() => {
+    // More frequent heartbeat checks
+    const interval = setInterval(() => {
       this.wss.clients.forEach((ws) => {
         if (ws.isAlive === false) {
           logger.warn('Client heartbeat timeout');
@@ -56,7 +57,11 @@ export class SSHProxyServer {
         ws.isAlive = false;
         ws.ping();
       });
-    }, 30000);
+    }, 15000); // Check every 15 seconds
+
+    this.wss.on('close', () => {
+      clearInterval(interval);
+    });
   }
 
   async handleMessage(clientId, message) {
@@ -87,7 +92,7 @@ export class SSHProxyServer {
       const authTimeout = setTimeout(() => {
         sshClient.end();
         reject(new Error('Authentication timeout'));
-      }, 30000);
+      }, 120000); // Increased to 120 seconds
 
       sshClient.on('ready', () => {
         clearTimeout(authTimeout);
@@ -100,21 +105,25 @@ export class SSHProxyServer {
 
       sshClient.on('error', (error) => {
         clearTimeout(authTimeout);
+        logger.error('SSH connection error:', error);
         this.sendError(ws, message.id, `SSH connection failed: ${error.message}`);
         reject(error);
       });
 
-      sshClient.connect({
+      const config = {
         host: credentials.host,
         port: 22,
         username: credentials.username,
         password: credentials.password,
         tryKeyboard: true,
-        readyTimeout: 30000,
+        readyTimeout: 120000,
         keepaliveInterval: 10000,
-        keepaliveCountMax: 3,
+        keepaliveCountMax: 10,
         debug: (msg) => logger.debug('SSH Debug:', msg)
-      });
+      };
+
+      logger.info('Attempting SSH connection:', { host: config.host, username: config.username });
+      sshClient.connect(config);
     });
   }
 
