@@ -1,96 +1,48 @@
+/**
+ * Hook for managing SSH setup state and operations
+ */
 import { useState, useCallback } from 'react';
-import { SSHKeyService } from '../services/SSHKeyService';
-import { CloudwaysService } from '../services/CloudwaysService';
-import { CLOUDWAYS_CONFIG } from '../config';
+import { SSHSetupService } from '../services/ssh/SSHSetupService';
 
 export function useSSHSetup() {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [status, setStatus] = useState('idle');
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [keyPair, setKeyPair] = useState(null);
-  const [sshAccess, setSSHAccess] = useState(null);
+  const [logs, setLogs] = useState([]);
 
-  const cloudways = new CloudwaysService(
-    CLOUDWAYS_CONFIG.API_KEY,
-    CLOUDWAYS_CONFIG.EMAIL
-  );
-  const sshKeyService = new SSHKeyService();
-
-  const generateKeys = useCallback(async () => {
-    setIsGenerating(true);
-    setError(null);
-
-    try {
-      const newKeyPair = await sshKeyService.generateKeyPair();
-      setKeyPair(newKeyPair);
-      return newKeyPair;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setIsGenerating(false);
-    }
+  const addLog = useCallback((message) => {
+    setLogs(prev => [...prev, message]);
   }, []);
 
-  const updateCloudwaysKey = useCallback(async (generatedKeyPair = null) => {
-    const currentKeyPair = generatedKeyPair || keyPair;
-    if (!currentKeyPair) {
-      throw new Error('No SSH key pair available');
-    }
-
-    setIsUpdating(true);
-    setError(null);
-
-    try {
-      await cloudways.initialize();
-      
-      await cloudways.updateSSHKey(
-        CLOUDWAYS_CONFIG.SOURCE_SERVER_ID,
-        currentKeyPair.publicKey
-      );
-
-      // Get updated SSH access details
-      const access = await cloudways.getSSHAccess(
-        CLOUDWAYS_CONFIG.SOURCE_SERVER_ID,
-        CLOUDWAYS_CONFIG.SOURCE_APP_ID
-      );
-
-      setSSHAccess(access);
-      return access;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setIsUpdating(false);
-    }
-  }, [keyPair]);
-
   const setupSSH = useCallback(async () => {
+    const service = new SSHSetupService(addLog);
+    
+    setStatus('running');
+    setError(null);
+    setResult(null);
+    setLogs([]);
+
     try {
-      // Step 1: Generate keys
-      const newKeyPair = await generateKeys();
-      
-      // Step 2: Update Cloudways with the new key
-      const access = await updateCloudwaysKey(newKeyPair);
-      
-      return {
-        keyPair: newKeyPair,
-        sshAccess: access
-      };
+      const setupResult = await service.setup();
+      setResult(setupResult);
+      setStatus('complete');
+      addLog('SSH setup completed successfully');
+      return setupResult;
     } catch (err) {
-      setError(err.message);
+      const errorMessage = err.message || 'Unknown error occurred';
+      setError(errorMessage);
+      setStatus('error');
+      addLog(`Error: ${errorMessage}`);
       throw err;
     }
-  }, [generateKeys, updateCloudwaysKey]);
+  }, [addLog]);
 
   return {
-    isGenerating,
-    isUpdating,
+    status,
+    result,
     error,
-    keyPair,
-    sshAccess,
-    generateKeys,
-    updateCloudwaysKey,
-    setupSSH
+    logs,
+    setupSSH,
+    isProcessing: status === 'running'
   };
 }

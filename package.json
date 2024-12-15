@@ -8,26 +8,28 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:clone": "node src/tests/cloudwaysClone.js",
-    "test:ssh": "node src/tests/sshKeyTest.js"
+    "proxy": "node server.js",
+    "start": "concurrently \"npm run dev\" \"npm run proxy\""
   },
   "dependencies": {
+    "@heroicons/react": "^2.0.18",
     "archiver": "^6.0.1",
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
+    "express": "^4.21.2",
+    "framer-motion": "^10.16.5",
+    "jszip": "^3.10.1",
     "openai": "^4.20.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "framer-motion": "^10.16.5",
-    "@heroicons/react": "^2.0.18",
-    "jszip": "^3.10.1",
-    "node-ssh": "^13.1.0",
-    "ssh-keygen": "^0.5.0",
-    "tmp-promise": "^3.0.3"
+    "ssh2": "^1.16.0",
+    "tmp-promise": "^3.0.3",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.5",
     "vite": "^5.0.0",

@@ -1,10 +1,9 @@
 import React from 'react';
 import { BlogWizard } from './components/BlogWizard';
-import { SSHSetupTest } from './components/SSHSetupTest';
+import { SSHTerminal } from './components/SSHTerminal';
 import { validateConfig } from './config/environment';
 
 function App() {
-  // Validate environment configuration on app start
   React.useEffect(() => {
     try {
       validateConfig();
@@ -18,7 +17,7 @@ function App() {
       <div className="container mx-auto px-4 py-8">
         <BlogWizard />
         <div className="mt-8">
-          <SSHSetupTest />
+          <SSHTerminal />
         </div>
       </div>
     </div>

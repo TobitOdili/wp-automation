@@ -1,16 +1,16 @@
 import { useState, useCallback } from 'react';
-import { SSHClient } from '../services/ssh/SSHClient';
+import { WebSSHClient } from '../services/ssh/WebSSHClient';
 
-export function useSSH() {
-  const [client] = useState(() => new SSHClient());
+export function useWebSSH() {
+  const [client] = useState(() => new WebSSHClient());
   const [isConnected, setIsConnected] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const connect = useCallback(async (credentials) => {
     setIsProcessing(true);
     setError(null);
-
+    
     try {
       await client.connect(credentials);
       setIsConnected(true);
@@ -23,11 +23,12 @@ export function useSSH() {
     }
   }, [client]);
 
-  const disconnect = useCallback(() => {
-    client.disconnect();
-    setIsConnected(false);
-    setError(null);
-  }, [client]);
+  const disconnect = useCallback(async () => {
+    if (isConnected) {
+      await client.disconnect();
+      setIsConnected(false);
+    }
+  }, [client, isConnected]);
 
   const executeCommand = useCallback(async (command) => {
     if (!isConnected) {
@@ -38,8 +39,7 @@ export function useSSH() {
     setError(null);
 
     try {
-      const result = await client.executeCommand(command);
-      return result;
+      return await client.executeCommand(command);
     } catch (err) {
       setError(err.message);
       throw err;

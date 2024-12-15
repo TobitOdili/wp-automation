@@ -1,27 +1,23 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useSSHSetup } from '../hooks/useSSHSetup';
 import { Button } from './Button';
 
 export function SSHSetupTest() {
-  const [status, setStatus] = useState('idle');
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
-  const { setupSSH } = useSSHSetup();
+  const { 
+    status, 
+    result, 
+    error, 
+    logs,
+    setupSSH, 
+    isProcessing 
+  } = useSSHSetup();
 
   const handleTest = async () => {
-    setStatus('running');
-    setError(null);
-    setResult(null);
-
     try {
-      setStatus('setting-up-ssh');
-      const setupResult = await setupSSH();
-      setResult(setupResult);
-      setStatus('complete');
+      await setupSSH();
     } catch (err) {
-      console.error('SSH setup failed:', err);
-      setError(err.message);
-      setStatus('error');
+      // Only log the error message to avoid serialization issues
+      console.error('SSH setup failed:', err.message);
     }
   };
 
@@ -31,26 +27,42 @@ export function SSHSetupTest() {
       
       <Button 
         onClick={handleTest}
-        disabled={status === 'running'}
+        disabled={isProcessing}
         className="mb-4"
       >
-        {status === 'running' ? 'Setting up SSH...' : 'Run SSH Setup'}
+        {isProcessing ? 'Setting up SSH...' : 'Run SSH Setup'}
       </Button>
 
       {/* Status Display */}
-      {status !== 'idle' && status !== 'error' && (
-        <div className="mb-4">
-          <p className="text-blue-400">
-            Status: {status === 'running' ? 'Initializing...' :
-                    status === 'setting-up-ssh' ? 'Setting up SSH access...' :
-                    status === 'complete' ? 'Setup complete!' : status}
-          </p>
+      <div className="mb-4">
+        <p className={`${
+          status === 'error' ? 'text-red-400' :
+          status === 'complete' ? 'text-green-400' :
+          'text-blue-400'
+        }`}>
+          Status: {status === 'running' ? 'Setting up SSH access...' :
+                  status === 'complete' ? 'Setup complete!' :
+                  status === 'error' ? 'Setup failed' : status}
+        </p>
+      </div>
+
+      {/* Logs Display */}
+      {logs.length > 0 && (
+        <div className="mb-4 p-2 bg-gray-900 rounded">
+          <p className="font-semibold mb-2">Progress:</p>
+          {logs.map((log, index) => (
+            <p key={index} className={`text-sm mb-1 ${
+              log.startsWith('Error:') ? 'text-red-300' : 'text-gray-300'
+            }`}>
+              {log}
+            </p>
+          ))}
         </div>
       )}
 
       {/* Error Display */}
       {error && (
-        <div className="mb-4 p-4 bg-red-900 text-red-100 rounded">
+        <div className="mb-4 p-4 bg-red-900/50 text-red-100 rounded">
           <p className="font-bold">Error:</p>
           <p>{error}</p>
         </div>
@@ -66,7 +78,7 @@ export function SSHSetupTest() {
               <p className="font-semibold">SSH Key Pair Generated:</p>
               <div className="bg-gray-900 p-2 rounded mt-2">
                 <p className="text-sm">Public Key (first 44 chars):</p>
-                <code className="text-green-400 block mt-1">
+                <code className="text-green-400 block mt-1 break-all">
                   {result.keyPair.publicKey.substring(0, 44)}...
                 </code>
               </div>
@@ -77,7 +89,7 @@ export function SSHSetupTest() {
             <div className="mb-4">
               <p className="font-semibold">SSH Access Details:</p>
               <pre className="bg-gray-900 p-2 rounded mt-2 overflow-x-auto">
-                <code className="text-green-400">
+                <code className="text-green-400 whitespace-pre-wrap break-all">
                   {JSON.stringify(result.sshAccess, null, 2)}
                 </code>
               </pre>
