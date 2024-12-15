@@ -1,55 +1,37 @@
-/**
- * Web-based SSH client implementation using secure WebSocket
- */
+import { logger } from '../../utils/ssh/logging.js';
+
 export class WebSSHClient {
   constructor() {
-    this.connected = false;
     this.socket = null;
-    this.connectionTimeout = 15000; // 15 seconds timeout
+    this.connected = false;
+    this.messageHandlers = new Map();
+    this.reconnectAttempts = 3;
+    this.reconnectDelay = 2000;
+    this.connectionTimeout = 30000;
     this.pingInterval = null;
+    this.pongTimeout = null;
   }
 
   async connect(credentials) {
     try {
-      if (!credentials.host || !credentials.username || !credentials.password) {
-        throw new Error('SSH credentials missing (host, username, or password)');
-      }
-
-      // Validate IP address format
-      if (!this._isValidIpAddress(credentials.host)) {
-        throw new Error('Invalid IP address format');
-      }
-
-      // Use secure WebSocket with standard SSH port
+      // Use relative path for WebSocket
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${credentials.host}:22/ssh`;
+      const wsUrl = `${protocol}//${window.location.host}/ssh-proxy`;
 
-      // Create WebSocket connection
       this.socket = new WebSocket(wsUrl);
       
-      // Set up connection handlers
-      await this._setupConnectionHandlers();
-      
-      // Wait for connection
       await this._waitForConnection();
-
-      // Send authentication
       await this._authenticate(credentials);
-
-      // Setup keep-alive ping
-      this._setupKeepAlive();
-
+      
+      this._setupHeartbeat();
+      this._setupMessageHandler();
+      
       this.connected = true;
       return true;
     } catch (error) {
-      this._cleanup();
+      this.cleanup();
       throw new Error(`SSH connection failed: ${error.message}`);
     }
-  }
-
-  async disconnect() {
-    this._cleanup();
-    this.connected = false;
   }
 
   async executeCommand(command) {
@@ -58,155 +40,144 @@ export class WebSSHClient {
     }
 
     return new Promise((resolve, reject) => {
+      const messageId = Math.random().toString(36).substring(7);
       let output = '';
       let error = '';
-      let timeout;
 
-      const commandId = Math.random().toString(36).substring(7);
-
-      // Set command timeout
-      timeout = setTimeout(() => {
-        this.socket.removeEventListener('message', messageHandler);
+      const timeout = setTimeout(() => {
+        this.messageHandlers.delete(messageId);
         reject(new Error('Command execution timed out'));
       }, 30000);
 
-      const messageHandler = (event) => {
+      this.messageHandlers.set(messageId, (message) => {
         try {
-          const response = JSON.parse(event.data);
-          
-          // Only process responses for this command
-          if (response.id !== commandId) return;
-
-          if (response.type === 'output') {
-            output += response.data;
-          } else if (response.type === 'error') {
-            error += response.data;
-          } else if (response.type === 'exit') {
+          if (message.type === 'output') {
+            output += message.data;
+          } else if (message.type === 'error') {
+            error += message.data;
+          } else if (message.type === 'exit') {
             clearTimeout(timeout);
-            this.socket.removeEventListener('message', messageHandler);
+            this.messageHandlers.delete(messageId);
             
-            if (response.code === 0) {
+            if (message.code === 0) {
               resolve({ output, error: null, code: 0 });
             } else {
               reject(new Error(error || 'Command failed'));
             }
           }
         } catch (err) {
-          console.error('Error parsing command response:', err);
+          logger.error('Error handling command response:', err);
         }
-      };
+      });
 
-      this.socket.addEventListener('message', messageHandler);
-
-      // Send command with ID
-      this.socket.send(JSON.stringify({ 
+      this._sendMessage({
         type: 'command',
-        id: commandId,
-        data: command 
-      }));
+        id: messageId,
+        command
+      });
     });
   }
 
-  _isValidIpAddress(ip) {
-    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    return ipRegex.test(ip);
-  }
-
-  _setupConnectionHandlers() {
-    return new Promise((resolve) => {
-      this.socket.onopen = () => {
-        console.log('WebSocket connection established');
-        resolve();
-      };
-
-      this.socket.onclose = () => {
-        console.log('WebSocket connection closed');
-        this._cleanup();
-      };
-
-      this.socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        this._cleanup();
-      };
-    });
-  }
-
-  _waitForConnection() {
+  async _waitForConnection() {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Connection timeout'));
       }, this.connectionTimeout);
 
-      const checkConnection = () => {
-        if (this.socket.readyState === WebSocket.OPEN) {
-          clearTimeout(timeout);
-          resolve();
-        } else if (this.socket.readyState === WebSocket.CLOSED || 
-                   this.socket.readyState === WebSocket.CLOSING) {
-          clearTimeout(timeout);
-          reject(new Error('Connection failed'));
-        } else {
-          setTimeout(checkConnection, 100);
-        }
+      this.socket.onopen = () => {
+        clearTimeout(timeout);
+        resolve();
       };
 
-      checkConnection();
+      this.socket.onerror = (error) => {
+        clearTimeout(timeout);
+        reject(new Error('WebSocket connection failed'));
+      };
     });
   }
 
   async _authenticate(credentials) {
     return new Promise((resolve, reject) => {
+      const messageId = Math.random().toString(36).substring(7);
       const timeout = setTimeout(() => {
         reject(new Error('Authentication timeout'));
-      }, 10000);
+      }, 30000);
 
-      const authHandler = (event) => {
-        try {
-          const response = JSON.parse(event.data);
-          
-          if (response.type === 'auth_success') {
-            clearTimeout(timeout);
-            this.socket.removeEventListener('message', authHandler);
-            resolve();
-          } else if (response.type === 'auth_failure') {
-            clearTimeout(timeout);
-            this.socket.removeEventListener('message', authHandler);
-            reject(new Error('Authentication failed'));
-          }
-        } catch (err) {
-          console.error('Error parsing auth response:', err);
+      this.messageHandlers.set(messageId, (message) => {
+        clearTimeout(timeout);
+        if (message.type === 'auth_success') {
+          resolve();
+        } else if (message.type === 'error') {
+          reject(new Error(message.error));
         }
-      };
+      });
 
-      this.socket.addEventListener('message', authHandler);
-
-      // Send authentication request
-      this.socket.send(JSON.stringify({
+      this._sendMessage({
         type: 'auth',
-        username: credentials.username,
-        password: credentials.password
-      }));
+        id: messageId,
+        credentials
+      });
     });
   }
 
-  _setupKeepAlive() {
-    // Send ping every 30 seconds to keep connection alive
-    this.pingInterval = setInterval(() => {
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({ type: 'ping' }));
+  _setupMessageHandler() {
+    this.socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        const handler = this.messageHandlers.get(message.id);
+        if (handler) {
+          handler(message);
+        }
+      } catch (error) {
+        logger.error('Error handling message:', error);
       }
-    }, 30000);
+    };
   }
 
-  _cleanup() {
+  _setupHeartbeat() {
+    // Send ping every 30 seconds
+    this.pingInterval = setInterval(() => {
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this._sendMessage({ type: 'ping' });
+        
+        this.pongTimeout = setTimeout(() => {
+          logger.warn('Pong timeout - reconnecting...');
+          this.cleanup();
+          this.connect();
+        }, 5000);
+      }
+    }, 30000);
+
+    // Handle pong responses
+    this.socket.onmessage = (event) => {
+      if (event.data === 'pong') {
+        clearTimeout(this.pongTimeout);
+      }
+    };
+  }
+
+  _sendMessage(message) {
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(message));
+    } else {
+      throw new Error('WebSocket not connected');
+    }
+  }
+
+  cleanup() {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
     }
-
+    if (this.pongTimeout) {
+      clearTimeout(this.pongTimeout);
+      this.pongTimeout = null;
+    }
     if (this.socket) {
       this.socket.close();
       this.socket = null;
     }
+    this.connected = false;
+    this.messageHandlers.clear();
   }
 }

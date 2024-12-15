@@ -1,69 +1,90 @@
 import { WebSocketServer } from 'ws';
-import { Client as SSHClient } from 'ssh2';
+import { Client } from 'ssh2';
+import { logger } from '../../utils/ssh/logging.js';
 
 export class SSHProxyServer {
   constructor(server) {
     this.wss = new WebSocketServer({ 
       server,
-      perMessageDeflate: false // Disable compression for better performance
+      path: '/ssh-proxy',
+      perMessageDeflate: false
     });
+    this.clients = new Map();
     this.setupWebSocketServer();
   }
 
   setupWebSocketServer() {
     this.wss.on('connection', (ws) => {
-      console.log('New WebSocket connection');
-      const sshClient = new SSHClient();
-      let authenticated = false;
+      logger.info('New WebSocket connection');
+      const clientId = Math.random().toString(36).substring(7);
+      const sshClient = new Client();
+      
+      this.clients.set(clientId, { ws, sshClient });
 
       ws.on('message', async (data) => {
         try {
           const message = JSON.parse(data);
-          
-          switch (message.type) {
-            case 'auth':
-              await this.handleAuth(ws, sshClient, message);
-              authenticated = true;
-              break;
-              
-            case 'command':
-              if (!authenticated) {
-                this.sendError(ws, message.id, 'Not authenticated');
-                return;
-              }
-              await this.handleCommand(ws, sshClient, message);
-              break;
-              
-            case 'ping':
-              ws.send('pong');
-              break;
-              
-            default:
-              this.sendError(ws, message.id, 'Unknown message type');
-          }
+          await this.handleMessage(clientId, message);
         } catch (error) {
-          console.error('SSH proxy error:', error);
+          logger.error('Message handling error:', error);
           this.sendError(ws, message?.id, error.message);
         }
       });
 
       ws.on('close', () => {
-        console.log('WebSocket connection closed');
-        sshClient.end();
+        logger.info('WebSocket connection closed');
+        this.cleanup(clientId);
       });
 
       ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
-        sshClient.end();
+        logger.error('WebSocket error:', error);
+        this.cleanup(clientId);
       });
+
+      // Setup ping/pong
+      ws.isAlive = true;
+      ws.on('pong', () => { ws.isAlive = true; });
     });
+
+    // Heartbeat check
+    setInterval(() => {
+      this.wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+          logger.warn('Client heartbeat timeout');
+          return ws.terminate();
+        }
+        ws.isAlive = false;
+        ws.ping();
+      });
+    }, 30000);
+  }
+
+  async handleMessage(clientId, message) {
+    const client = this.clients.get(clientId);
+    if (!client) return;
+
+    const { ws, sshClient } = client;
+
+    switch (message.type) {
+      case 'auth':
+        await this.handleAuth(ws, sshClient, message);
+        break;
+      case 'command':
+        await this.handleCommand(ws, sshClient, message);
+        break;
+      case 'ping':
+        ws.send(JSON.stringify({ type: 'pong' }));
+        break;
+      default:
+        throw new Error('Unknown message type');
+    }
   }
 
   async handleAuth(ws, sshClient, message) {
     const { credentials } = message;
     
     return new Promise((resolve, reject) => {
-      let authTimeout = setTimeout(() => {
+      const authTimeout = setTimeout(() => {
         sshClient.end();
         reject(new Error('Authentication timeout'));
       }, 30000);
@@ -83,15 +104,6 @@ export class SSHProxyServer {
         reject(error);
       });
 
-      // Support keyboard-interactive auth
-      sshClient.on('keyboard-interactive', (name, instructions, lang, prompts, finish) => {
-        if (prompts.length > 0 && prompts[0].prompt.toLowerCase().includes('password')) {
-          finish([credentials.password]);
-        } else {
-          finish([]);
-        }
-      });
-
       sshClient.connect({
         host: credentials.host,
         port: 22,
@@ -99,12 +111,18 @@ export class SSHProxyServer {
         password: credentials.password,
         tryKeyboard: true,
         readyTimeout: 30000,
-        keepaliveInterval: 10000
+        keepaliveInterval: 10000,
+        keepaliveCountMax: 3,
+        debug: (msg) => logger.debug('SSH Debug:', msg)
       });
     });
   }
 
   async handleCommand(ws, sshClient, message) {
+    if (!sshClient._sock) {
+      throw new Error('SSH connection not established');
+    }
+
     sshClient.exec(message.command, (err, stream) => {
       if (err) {
         this.sendError(ws, message.id, err.message);
@@ -142,9 +160,8 @@ export class SSHProxyServer {
         });
       });
 
-      // Handle stream errors
       stream.on('error', (err) => {
-        this.sendError(ws, message.id, `Stream error: ${err.message}`);
+        this.sendError(ws, message.id, err.message);
       });
     });
   }
@@ -161,5 +178,23 @@ export class SSHProxyServer {
       type: 'error',
       error
     });
+  }
+
+  cleanup(clientId) {
+    const client = this.clients.get(clientId);
+    if (client) {
+      const { sshClient } = client;
+      if (sshClient) {
+        sshClient.end();
+      }
+      this.clients.delete(clientId);
+    }
+  }
+
+  cleanupAll() {
+    this.clients.forEach((client, id) => {
+      this.cleanup(id);
+    });
+    this.wss.close();
   }
 }
