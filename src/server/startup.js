@@ -5,18 +5,18 @@ import { findAvailablePort } from '../utils/port.js';
 
 export async function createServers(app) {
   try {
+    // Find available port starting from 3001
+    const port = await findAvailablePort(3001);
+    logger.info(`Starting server on port ${port}...`);
+
     // Create HTTP server
     const httpServer = createServer(app);
-    
+
     // Create WebSocket server
     const wss = new WebSocketServer({ 
       server: httpServer,
       path: '/ssh-proxy'
     });
-
-    // Find available port starting from 3001
-    const port = await findAvailablePort(3001);
-    logger.info(`Starting server on port ${port}...`);
 
     return { httpServer, wss, port };
   } catch (error) {
@@ -40,19 +40,14 @@ export function setupShutdownHandlers(servers) {
       }
     });
 
-    try {
-      await new Promise((resolve) => wss.close(resolve));
-      await new Promise((resolve) => httpServer.close(resolve));
-      logger.info('Server shutdown complete');
-    } catch (err) {
-      logger.error('Error during shutdown:', err);
-    }
+    // Close servers
+    await Promise.all([
+      new Promise(resolve => wss.close(resolve)),
+      new Promise(resolve => httpServer.close(resolve))
+    ]);
 
-    // Force exit after 5 seconds
-    setTimeout(() => {
-      logger.warn('Forcing process exit after timeout');
-      process.exit(1);
-    }, 5000);
+    logger.info('Server shutdown complete');
+    process.exit(0);
   };
 
   // Handle shutdown signals

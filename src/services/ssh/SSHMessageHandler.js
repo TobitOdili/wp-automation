@@ -1,12 +1,13 @@
-/**
- * Handles WebSocket message processing for SSH communication
- */
+import { logger } from '../../utils/ssh/logging.js';
+
 export class SSHMessageHandler {
   constructor() {
     this.handlers = new Map();
   }
 
   addHandler(messageId, handler, timeout = 30000) {
+    logger.debug(`Adding message handler for ID: ${messageId}`);
+    
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.removeHandler(messageId);
@@ -22,27 +23,32 @@ export class SSHMessageHandler {
     });
   }
 
+  handleMessage(message) {
+    const handler = this.handlers.get(message.id);
+    if (!handler) {
+      logger.debug(`No handler found for message ID: ${message.id}`);
+      return;
+    }
+
+    try {
+      const result = handler.handler(message);
+      if (result?.complete) {
+        this.removeHandler(message.id);
+        handler.resolve(result.data);
+      }
+    } catch (error) {
+      logger.error('Error handling message:', error);
+      this.removeHandler(message.id);
+      handler.reject(error);
+    }
+  }
+
   removeHandler(messageId) {
     const handler = this.handlers.get(messageId);
     if (handler) {
       clearTimeout(handler.timeoutId);
       this.handlers.delete(messageId);
-    }
-  }
-
-  handleMessage(message) {
-    const handler = this.handlers.get(message.id);
-    if (handler) {
-      try {
-        const result = handler.handler(message);
-        if (result?.complete) {
-          this.removeHandler(message.id);
-          handler.resolve(result.data);
-        }
-      } catch (error) {
-        this.removeHandler(message.id);
-        handler.reject(error);
-      }
+      logger.debug(`Removed handler for ID: ${messageId}`);
     }
   }
 
@@ -51,5 +57,6 @@ export class SSHMessageHandler {
       clearTimeout(handler.timeoutId);
     });
     this.handlers.clear();
+    logger.debug('Cleared all message handlers');
   }
 }

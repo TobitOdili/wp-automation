@@ -12,7 +12,7 @@ async function startServer() {
     const servers = await createServers(app);
     
     // Setup SSH proxy
-    setupSSHProxy(servers.httpServer);
+    setupSSHProxy(servers.wss);
 
     // Setup shutdown handlers
     setupShutdownHandlers(servers);

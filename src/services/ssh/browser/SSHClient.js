@@ -1,12 +1,14 @@
-import { SSHConnection } from './connection/SSHConnection';
-import { SSHCommandExecutor } from './commands/SSHCommandExecutor';
-import { SSHEventEmitter } from './events/SSHEventEmitter';
+/**
+ * Browser-side SSH client implementation
+ */
+import { SSHConnection } from './SSHConnection';
+import { SSHEventEmitter } from '../core/SSHEventEmitter';
+import { logger } from '../../../utils/ssh/logging';
 
 export class SSHClient extends SSHEventEmitter {
   constructor() {
     super();
     this.connection = new SSHConnection();
-    this.commandExecutor = new SSHCommandExecutor(this.connection);
   }
 
   async connect(credentials) {
@@ -16,6 +18,7 @@ export class SSHClient extends SSHEventEmitter {
       this.emit('connected');
       return true;
     } catch (error) {
+      logger.error('Connection failed:', error);
       this.emit('error', error);
       throw error;
     }
@@ -24,10 +27,11 @@ export class SSHClient extends SSHEventEmitter {
   async executeCommand(command) {
     try {
       this.emit('executing', command);
-      const result = await this.commandExecutor.execute(command);
-      this.emit('executed', result);
-      return result;
+      const output = await this.connection.executeCommand(command);
+      this.emit('executed', output);
+      return output;
     } catch (error) {
+      logger.error('Command execution failed:', error);
       this.emit('error', error);
       throw error;
     }

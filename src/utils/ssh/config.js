@@ -1,8 +1,4 @@
-/**
- * SSH configuration constants
- */
 export const SSH_CONFIG = {
-  // Connection settings
   CONNECTION: {
     PORT: 22,
     TIMEOUT: 60000, // 60 seconds
@@ -12,7 +8,6 @@ export const SSH_CONFIG = {
     KEEPALIVE_COUNT_MAX: 3
   },
 
-  // Security algorithms
   ALGORITHMS: {
     KEX: [
       'ecdh-sha2-nistp256',
@@ -30,7 +25,6 @@ export const SSH_CONFIG = {
     ]
   },
 
-  // WebSocket settings
   WEBSOCKET: {
     PING_INTERVAL: 30000,
     PONG_TIMEOUT: 5000,

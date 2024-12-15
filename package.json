@@ -8,10 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "server:dev": "cross-env NODE_ENV=development node src/server/index.js",
-    "server:prod": "cross-env NODE_ENV=production node src/server/index.js",
-    "start": "concurrently \"npm run server:dev\" \"npm run dev\"",
-    "start:prod": "npm run build && npm run server:prod"
+    "start": "node src/cli/ssh-client.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.0.18",
@@ -23,9 +20,7 @@
     "jszip": "^3.10.1",
     "openai": "^4.20.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "ssh2": "^1.14.0",
-    "ws": "^8.14.2"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",

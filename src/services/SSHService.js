@@ -1,51 +1,45 @@
-import { NodeSSH } from 'node-ssh';
+import SSHClient from '../cli/ssh-client.js';
+import { logger } from '../utils/ssh/logging.js';
 
 export class SSHService {
   constructor() {
-    this.ssh = new NodeSSH();
-    this.connected = false;
+    this.client = new SSHClient();
   }
 
-  async connect(config) {
+  async connect(credentials) {
     try {
-      await this.ssh.connect({
-        host: config.host,
-        username: config.username,
-        password: config.password,
-        port: config.port || 22
-      });
-      this.connected = true;
+      logger.info('Connecting to SSH server...');
+      await this.client.connect(
+        credentials.host,
+        credentials.username,
+        credentials.password
+      );
+      logger.info('SSH connection established');
       return true;
     } catch (error) {
-      throw new Error(`SSH connection failed: ${error.message}`);
-    }
-  }
-
-  async disconnect() {
-    if (this.connected) {
-      await this.ssh.dispose();
-      this.connected = false;
+      logger.error('SSH connection failed:', error);
+      throw error;
     }
   }
 
   async executeCommand(command) {
-    if (!this.connected) {
-      throw new Error('SSH connection not established');
-    }
-
     try {
-      const result = await this.ssh.execCommand(command);
-      return {
-        stdout: result.stdout,
-        stderr: result.stderr,
-        code: result.code
-      };
+      logger.info('Executing command:', command);
+      const output = await this.client.executeCommand(command);
+      logger.info('Command executed successfully');
+      return output;
     } catch (error) {
-      throw new Error(`Command execution failed: ${error.message}`);
+      logger.error('Command execution failed:', error);
+      throw error;
     }
   }
 
-  async executeWPCLI(command, path = '/var/www/html') {
-    return this.executeCommand(`cd ${path} && wp ${command}`);
+  disconnect() {
+    try {
+      this.client.disconnect();
+      logger.info('SSH connection closed');
+    } catch (error) {
+      logger.error('Error disconnecting:', error);
+    }
   }
 }
