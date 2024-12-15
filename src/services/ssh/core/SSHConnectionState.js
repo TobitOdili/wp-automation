@@ -1,7 +1,8 @@
-/**
- * Manages SSH connection state
- */
-export class SSHConnectionState {
+import { SSHConnectionEvents } from './SSHConnectionEvents';
+import { SSHEventEmitter } from './SSHEventEmitter';
+import { logger } from '../../../utils/ssh/logging';
+
+export class SSHConnectionState extends SSHEventEmitter {
   static States = {
     DISCONNECTED: 'disconnected',
     CONNECTING: 'connecting',
@@ -10,13 +11,23 @@ export class SSHConnectionState {
   };
 
   constructor() {
+    super();
     this.state = SSHConnectionState.States.DISCONNECTED;
     this.error = null;
   }
 
   setState(newState, error = null) {
+    const oldState = this.state;
     this.state = newState;
     this.error = error;
+
+    logger.debug(`Connection state changed: ${oldState} -> ${newState}`);
+    
+    this.emit(SSHConnectionEvents.STATE_CHANGE, {
+      oldState,
+      newState,
+      error
+    });
   }
 
   getState() {

@@ -3,6 +3,8 @@ import { SSHManager } from './SSHManager.js';
 import { logger } from '../../utils/ssh/logging.js';
 
 export function setupSSHProxy(server) {
+  logger.info('Setting up SSH proxy...');
+  
   const wss = new WebSocketServer({ 
     server,
     path: '/ssh-proxy',
@@ -20,15 +22,20 @@ export function setupSSHProxy(server) {
     ws.on('message', async (data) => {
       try {
         const message = JSON.parse(data);
+        logger.debug(`Received message from client (${connectionId}):`, message.type);
         
         switch (message.type) {
           case 'connect':
+            logger.info(`Connection request from client (${connectionId})`);
             await sshManager.connect(connectionId, message.credentials);
+            logger.info(`Connection established (${connectionId})`);
             break;
           case 'disconnect':
+            logger.info(`Disconnect request from client (${connectionId})`);
             sshManager.cleanup(connectionId);
             break;
           default:
+            logger.warn(`Unknown message type from client (${connectionId}):`, message.type);
             throw new Error('Unknown message type');
         }
       } catch (error) {
@@ -50,8 +57,10 @@ export function setupSSHProxy(server) {
 
   // Cleanup on server shutdown
   server.on('close', () => {
+    logger.info('Cleaning up SSH connections...');
     sshManager.cleanupAll();
   });
 
+  logger.info('SSH proxy setup complete');
   return sshManager;
 }

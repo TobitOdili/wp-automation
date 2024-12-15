@@ -18,6 +18,8 @@ export async function createServers(app) {
       path: '/ssh-proxy'
     });
 
+    logger.info('WebSocket server created');
+
     return { httpServer, wss, port };
   } catch (error) {
     logger.error('Failed to create servers:', error);
@@ -35,6 +37,7 @@ export function setupShutdownHandlers(servers) {
     wss.clients.forEach(client => {
       try {
         client.close();
+        logger.debug('Closed WebSocket client connection');
       } catch (err) {
         logger.error('Error closing WebSocket client:', err);
       }

@@ -1,6 +1,3 @@
-/**
- * Browser-side SSH client implementation
- */
 import { SSHConnection } from './SSHConnection';
 import { SSHEventEmitter } from '../core/SSHEventEmitter';
 import { logger } from '../../../utils/ssh/logging';
@@ -13,8 +10,17 @@ export class SSHClient extends SSHEventEmitter {
 
   async connect(credentials) {
     try {
+      logger.info('Initiating SSH connection...');
       this.emit('connecting');
+      
+      logger.debug('Connection details:', {
+        host: credentials.host,
+        username: credentials.username,
+        hasPassword: !!credentials.password
+      });
+
       await this.connection.connect(credentials);
+      logger.info('SSH connection established');
       this.emit('connected');
       return true;
     } catch (error) {
@@ -26,8 +32,12 @@ export class SSHClient extends SSHEventEmitter {
 
   async executeCommand(command) {
     try {
+      logger.info('Executing command:', command);
       this.emit('executing', command);
+      
       const output = await this.connection.executeCommand(command);
+      logger.debug('Command output:', output);
+      
       this.emit('executed', output);
       return output;
     } catch (error) {
@@ -38,6 +48,7 @@ export class SSHClient extends SSHEventEmitter {
   }
 
   disconnect() {
+    logger.info('Disconnecting SSH client');
     this.connection.disconnect();
     this.emit('disconnected');
   }
