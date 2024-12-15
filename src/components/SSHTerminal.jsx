@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Button } from './Button';
 import { useWebSSH } from '../hooks/useWebSSH';
+import { logger } from '../utils/ssh/logging';
 
 export function SSHTerminal() {
   const { 
@@ -21,21 +22,28 @@ export function SSHTerminal() {
 
   const handleConnect = useCallback(async () => {
     try {
+      logger.info('Attempting SSH connection...');
       await connect(credentials);
     } catch (err) {
-      console.error('SSH setup error:', err);
+      logger.error('SSH connection failed:', err);
     }
   }, [connect, credentials]);
 
   const handleDisconnect = useCallback(() => {
-    disconnect();
+    try {
+      disconnect();
+      logger.info('SSH disconnected');
+    } catch (err) {
+      logger.error('SSH disconnect error:', err);
+    }
   }, [disconnect]);
 
   const handleTestCommand = useCallback(async () => {
     try {
+      logger.info('Executing test command...');
       await executeCommand('whoami && pwd');
     } catch (err) {
-      console.error('Command error:', err);
+      logger.error('Command execution failed:', err);
     }
   }, [executeCommand]);
 

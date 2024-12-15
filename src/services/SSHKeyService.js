@@ -1,4 +1,5 @@
-import { generateRSAKeyPair, exportSSHPublicKey, exportPrivateKey } from '../utils/crypto';
+import { generateRSAKeyPair, exportSSHPublicKey, exportPrivateKey } from '../utils/crypto/index.js';
+import { logger } from '../utils/ssh/logging.js';
 
 export class SSHKeyService {
   constructor() {
@@ -7,7 +8,9 @@ export class SSHKeyService {
 
   async generateKeyPair() {
     try {
-      // Generate RSA key pair using Web Crypto API
+      logger.info('Generating new SSH key pair...');
+      
+      // Generate RSA key pair
       const cryptoKeyPair = await generateRSAKeyPair();
       
       // Export keys in the required formats
@@ -15,8 +18,11 @@ export class SSHKeyService {
       const privateKey = await exportPrivateKey(cryptoKeyPair.privateKey);
 
       this.keyPair = { publicKey, privateKey };
+      logger.info('SSH key pair generated successfully');
+      
       return this.keyPair;
     } catch (error) {
+      logger.error('Failed to generate SSH key pair:', error);
       throw new Error(`Failed to generate SSH key pair: ${error.message}`);
     }
   }
